@@ -23,7 +23,7 @@ SymPy برای منطق گزاره‌ای و Z3 برای منطق مرتبه ا�
 
 logic_type = st.sidebar.selectbox(
     "نوع منطق را انتخاب کنید:",
-    ["معرفی", "منطق گزاره‌ای", "منطق مرتبه اول", "حل مسئله با Z3"]
+    ["معرفی", "منطق گزاره‌ای", "منطق مرتبه اول", "حل مسئله با kanren"]
 )
 
 if logic_type == "معرفی":
@@ -207,103 +207,49 @@ elif logic_type == "منطق مرتبه اول":
             except Exception as e:
                 st.error(f"خطا: {e}")
 
-elif logic_type == "حل مسئله با Z3":
-    st.header("حل مسئله با Z3")
+elif logic_type == "حل مسئله با kanren":
+    st.header("حل مسئله با kanren")
 
-    problem_type = st.selectbox(
-        "نوع مسئله را انتخاب کنید:",
-        ["منطق گزاره‌ای", "منطق مرتبه اول", "حساب و اعداد"]
-    )
+    st.markdown("کد پایتون خود را وارد کنید (کتابخانه kanren را وارد کنید و پرس‌وجوهای خود را بنویسید):")
 
-    if problem_type == "منطق گزاره‌ای":
-        st.subheader("حل مسئله منطق گزاره‌ای با Z3")
+    default_code = '''from kanren import run, var, fact, Relation, conde
 
-        P, Q, R = Bool('P'), Bool('Q'), Bool('R')
+# تعریف متغیرها و رابطه
+parent = Relation()
 
-        example_choice = st.selectbox(
-            "یک مثال انتخاب کنید یا فرمول خود را وارد نمایید:",
-            [
-                "انتخاب مثال",
-                "P و نقیض P (ناسازگار)",
-                "P یا نقیض P (tautology)",
-                "P سپس Q و P پس نتیجه Q",
-                "فرمول دلخواه"
-            ]
-        )
+# افزودن حقایق به پایگاه داده
+fact(parent, "mary", "john")
+fact(parent, "john", "michael")
 
-        if example_choice == "P و نقیض P (ناسازگار)":
-            expr = And(P, Not(P))
-        elif example_choice == "P یا نقیض P (tautology)":
-            expr = Or(P, Not(P))
-        elif example_choice == "P سپس Q و P پس نتیجه Q":
-            expr = And(Z3Implies(P, Q), P)
-        else:
-            custom_expr = st.text_input("فرمول خود را وارد کنید (با syntax Z3):", "And(P, Q)")
-            try:
-                expr = eval(custom_expr)
-            except Exception as e:
-                st.error("خطا در تفسیر فرمول")
-                expr = None
+x = var()
+# پرس‌وجو: یافتن فرزندان mary
+result = run(5, x, parent("mary", x))
+print("فرزندان mary:", result)
+'''
 
-        if expr is not None:
-            st.write(f"**عبارت منطقی:** {expr}")
+    code_input = st.text_area("کد کانرن خود را اینجا بنویسید:", value=default_code, height=300)
 
-            solver = Solver()
-            solver.add(expr)
+    if st.button("اجرا کردن کد"):
+        import sys
+        import io
 
-            if st.button("حل مسئله"):
-                result = solver.check()
+        # Redirect stdout to capture print outputs
+        old_stdout = sys.stdout
+        redirected_output = sys.stdout = io.StringIO()
 
-                if result == sat:
-                    st.success("فرمول ارضاپذیر است ✓")
-                    model = solver.model()
-                    st.write("**مدل یافت شده:**")
-                    for decl in model:
-                        st.write(f"{decl.name()} = {model[decl]}")
-                else:
-                    st.error("فرمول ناسازگار است ✗")
+        local_vars = {}
 
-    elif problem_type == "منطق مرتبه اول":
-        st.subheader("حل مسئله منطق مرتبه اول با Z3")
-
-        Human = DeclareSort('Human')
-        mortal = Function('mortal', Human, BoolSort())
-        socrates = Const('socrates', Human)
-        x = Const('x', Human)
-
-        axiom1 = ForAll([x], Z3Implies(Human(x), mortal(x)))
-        axiom2 = Human(socrates)
-
-        solver = Solver()
-        solver.add(axiom1, axiom2)
-
-        conjecture = mortal(socrates)
-
-        if st.button("بررسی استنتاج"):
-            solver.push()
-            solver.add(Not(conjecture))
-
-            if solver.check() == unsat:
-                st.success("✅ استنتاج معتبر است: سقراط فانی است")
+        try:
+            exec(code_input, {'__builtins__': __builtins__}, local_vars)
+            output = redirected_output.getvalue()
+            if output.strip():
+                st.text_area("خروجی:", value=output, height=200)
             else:
-                st.error("❌ استنتاج نامعتبر است")
-
-            solver.pop()
-
-    elif problem_type == "حساب و اعداد":
-        st.subheader("حل مسائل عددی با Z3")
-
-        x, y = Int('x'), Int('y')
-
-        solver = Solver()
-        solver.add(x + y == 10, x > y, x > 0, y > 0)
-
-        if st.button("حل معادله x + y = 10 با x > y"):
-            if solver.check() == sat:
-                model = solver.model()
-                st.success(f"✅ راه حل یافت شد: x = {model[x]}, y = {model[y]}")
-            else:
-                st.error("❌ هیچ راه حلی یافت نشد")
+                st.warning("کد اجرا شد ولی خروجی چاپی نداشت.")
+        except Exception as e:
+            st.error(f"خطا در اجرای کد: {e}")
+        finally:
+            sys.stdout = old_stdout
 
 # Footer
 st.markdown("---")
